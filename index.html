@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Instant Responsive ToDo App</title>
+
+    <!-- Pre-styled root to prevent ANY white flash before CSS loads -->
+    <style>
+        html, body {
+            background-color: #121212 !important;
+            color: #e5e7eb !important;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            height: 100%;
+            overflow: hidden;
+        }
+        #root {
+            height: 100%;
+        }
+        /* Custom scrollbars for slick dark look */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #18181b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #3f3f46;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #52525b;
+        }
+    </style>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        darkBg: '#121212',
+                        darkSidebar: '#18181b',
+                        darkCard: '#27272a',
+                        darkInput: '#1f1f23',
+                        darkBorder: '#3f3f46',
+                        accent: '#3b82f6',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- React, ReactDOM & Babel -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-darkBg text-gray-200 antialiased selection:bg-blue-600 selection:text-white">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
+
+        // Custom Icon wrapper using Lucide
+        const Icon = ({ name, className = "w-4 h-4" }) => {
+            useEffect(() => {
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            }, [name]);
+            return <i data-lucide={name} class={className}></i>;
+        };
+
+        const INITIAL_CATEGORIES = [
+            { id: 'today', label: 'Today', icon: 'sun' },
+            { id: 'tomorrow', label: 'Tomorrow', icon: 'calendar-days' },
+            { id: 'after_tomorrow', label: 'After tomorrow', icon: 'calendar' },
+            { id: 'past', label: 'Past', icon: 'history' },
+            { id: 'all', label: 'All', icon: 'layers' },
+            { id: 'manual', label: 'Manual', icon: 'list-todo' },
+            { id: 'va', label: 'VA', icon: 'folder' },
+        ];
+
+        const INITIAL_TASKS = [
+            { id: '1', title: 'SPAM email', category: 'va', completed: false, date: new Date().toISOString() },
+            { id: '2', title: 'WINDOWS 11', category: 'va', completed: false, date: new Date().toISOString() },
+            { id: '3', title: 'Skopiować system Windows 10', category: 'va', completed: false, date: new Date().toISOString() },
+            { id: '4', title: 'Na drugim dysku zainstalować system Windows 11', category: 'va', completed: false, date: new Date().toISOString() },
+            { id: '5', title: 'KALIBRATOR MONITORA', category: 'va', completed: false, date: new Date().toISOString() },
+            { id: '6', title: 'ROZPOCZĘCIE NOWEGO MIESIĄCA', category: 'va', completed: false, date: new Date().toISOString() },
+            { id: '7', title: 'NAJEM - KIA CEED - 1700 ZŁ', category: 'va', completed: false, date: new Date().toISOString() },
+            { id: '8', title: 'NAJEM - FORD - 1100 ZŁ', category: 'va', completed: false, date: new Date().toISOString() },
+            { id: '9', title: 'Przejrzeć zaległe maile', category: 'today', completed: true, date: new Date().toISOString() },
+            { id: '10', title: 'Kopia zapasowa bazy danych', category: 'tomorrow', completed: false, date: new Date(Date.now() + 86400000).toISOString() },
+        ];
+
+        function App() {
+            const [tasks, setTasks] = useState(() => {
+                const saved = localStorage.getItem('todo_app_tasks');
+                return saved ? JSON.parse(saved) : INITIAL_TASKS;
+            });
+
+            const [selectedCategory, setSelectedCategory] = useState('va');
+            const [searchQuery, setSearchQuery] = useState('');
+            const [newTaskTitle, setNewTaskTitle] = useState('');
+            const [showCompleted, setShowCompleted] = useState(true);
+            const [sidebarOpen, setSidebarOpen] = useState(true);
+            const [isDarkMode, setIsDarkMode] = useState(true);
+
+            // Sync with local storage
+            useEffect(() => {
+                localStorage.setItem('todo_app_tasks', JSON.stringify(tasks));
+            }, [tasks]);
+
+            // Re-render Lucide icons on DOM updates
+            useEffect(() => {
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            });
+
+            const addTask = (e) => {
+                e.preventDefault();
+                if (!newTaskTitle.trim()) return;
+
+                const newTask = {
+                    id: Date.now().toString(),
+                    title: newTaskTitle.trim(),
+                    category: selectedCategory === 'all' || selectedCategory === 'today' ? 'manual' : selectedCategory,
+                    completed: false,
+                    date: new Date().toISOString()
+                };
+
+                setTasks([newTask, ...tasks]);
+                setNewTaskTitle('');
+            };
+
+            const toggleTask = (id) => {
+                setTasks(tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
+            };
+
+            const deleteTask = (id) => {
+                setTasks(tasks.filter(t => t.id !== id));
+            };
+
+            // Task counters per category
+            const categoryCounts = useMemo(() => {
+                const counts = { all: tasks.filter(t => !t.completed).length };
+                INITIAL_CATEGORIES.forEach(cat => {
+                    if (cat.id !== 'all') {
+                        counts[cat.id] = tasks.filter(t => t.category === cat.id && !t.completed).length;
+                    }
+                });
+                return counts;
+            }, [tasks]);
+
+            // Filtered task lists
+            const filteredTasks = useMemo(() => {
+                return tasks.filter(task => {
+                    const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase());
+                    const matchesCategory = 
+                        selectedCategory === 'all' ? true : task.category === selectedCategory;
+                    return matchesSearch && matchesCategory;
+                });
+            }, [tasks, selectedCategory, searchQuery]);
+
+            const activeTasks = filteredTasks.filter(t => !t.completed);
+            const completedTasks = filteredTasks.filter(t => t.completed);
+
+            return (
+                <div className={`h-screen flex flex-col ${isDarkMode ? 'dark bg-zinc-950 text-zinc-100' : 'bg-gray-100 text-gray-800'}`}>
+                    
+                    {/* Top Header */}
+                    <header className="h-12 border-b border-zinc-800 bg-zinc-900/80 backdrop-blur px-4 flex items-center justify-between shrink-0">
+                        <div className="flex items-center gap-3">
+                            <button 
+                                onClick={() => setSidebarOpen(!sidebarOpen)} 
+                                className="p-1.5 hover:bg-zinc-800 rounded-md text-zinc-400 hover:text-zinc-200 transition"
+                                title="Toggle Sidebar"
+                            >
+                                <Icon name="panel-left" className="w-5 h-5" />
+                            </button>
+                            <span className="font-semibold text-sm tracking-wide flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+                                Instant ToDo Workspace
+                            </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            <button 
+                                onClick={() => setIsDarkMode(!isDarkMode)} 
+                                className="p-1.5 hover:bg-zinc-800 rounded-md text-zinc-400 hover:text-zinc-200 transition"
+                                title="Toggle Theme"
+                            >
+                                <Icon name={isDarkMode ? "sun" : "moon"} className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </header>
+
+                    {/* Main Layout Body */}
+                    <div className="flex-1 flex overflow-hidden">
+                        
+                        {/* Sidebar Navigation */}
+                        <aside className={`${sidebarOpen ? 'w-64' : 'w-0 border-none'} border-r border-zinc-800/80 bg-zinc-900/50 flex flex-col transition-all duration-200 overflow-hidden shrink-0`}>
+                            
+                            {/* Search Box */}
+                            <div className="p-3 border-b border-zinc-800/50">
+                                <div className="relative">
+                                    <Icon name="search" className="w-4 h-4 absolute left-3 top-2.5 text-zinc-500" />
+                                    <input 
+                                        type="text" 
+                                        placeholder="Search" 
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        className="w-full bg-zinc-950/60 border border-zinc-800 rounded-lg pl-9 pr-3 py-1.5 text-xs focus:outline-none focus:border-zinc-600 placeholder-zinc-500 transition"
+                                    />
+                                    {searchQuery && (
+                                        <button 
+                                            onClick={() => setSearchQuery('')}
+                                            className="absolute right-2.5 top-2.5 text-zinc-500 hover:text-zinc-300"
+                                        >
+                                            <Icon name="x" className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Category Navigation Items */}
+                            <nav className="flex-1 overflow-y-auto p-2 space-y-0.5">
+                                {INITIAL_CATEGORIES.map(cat => {
+                                    const isActive = selectedCategory === cat.id;
+                                    const count = categoryCounts[cat.id] || 0;
+                                    return (
+                                        <button
+                                            key={cat.id}
+                                            onClick={() => setSelectedCategory(cat.id)}
+                                            className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+                                                isActive 
+                                                    ? 'bg-zinc-800/90 text-white shadow-sm' 
+                                                    : 'text-zinc-400 hover:bg-zinc-800/40 hover:text-zinc-200'
+                                            }`}
+                                        >
+                                            <div className="flex items-center gap-2.5">
+                                                <Icon name={cat.icon} className={`w-4 h-4 ${isActive ? 'text-blue-400' : 'text-zinc-500'}`} />
+                                                <span>{cat.label}</span>
+                                            </div>
+                                            <span className={`text-[11px] px-1.5 py-0.5 rounded-full ${
+                                                isActive ? 'bg-zinc-700 text-zinc-200' : 'text-zinc-500'
+                                            }`}>
+                                                {count}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                            </nav>
+
+                            {/* Footer info */}
+                            <div className="p-3 border-t border-zinc-800/50 text-[11px] text-zinc-500 flex items-center justify-between">
+                                <span className="flex items-center gap-1">
+                                    <Icon name="check-circle-2" className="w-3.5 h-3.5 text-emerald-500" /> Zero Flash Loaded
+                                </span>
+                                <span>v1.0.0</span>
+                            </div>
+                        </aside>
+
+                        {/* Task Content Area */}
+                        <main className="flex-1 flex flex-col bg-zinc-950 overflow-hidden">
+                            
+                            {/* Main Header / Add Task Bar */}
+                            <div className="p-4 border-b border-zinc-800/60 bg-zinc-900/30">
+                                <div className="max-w-4xl mx-auto space-y-3">
+                                    
+                                    {/* Category Title */}
+                                    <div className="flex items-center justify-between">
+                                        <h1 className="text-lg font-semibold uppercase tracking-wider text-zinc-200 flex items-center gap-2">
+                                            {INITIAL_CATEGORIES.find(c => c.id === selectedCategory)?.label || selectedCategory}
+                                        </h1>
+                                        <span className="text-xs text-zinc-500">
+                                            {activeTasks.length} pending task{activeTasks.length !== 1 ? 's' : ''}
+                                        </span>
+                                    </div>
+
+                                    {/* Task Add Form */}
+                                    <form onSubmit={addTask} className="relative flex items-center">
+                                        <input 
+                                            type="text" 
+                                            placeholder="New task..."
+                                            value={newTaskTitle}
+                                            onChange={(e) => setNewTaskTitle(e.target.value)}
+                                            className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-4 pr-12 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/50 transition shadow-inner"
+                                        />
+                                        <button 
+                                            type="submit"
+                                            disabled={!newTaskTitle.trim()}
+                                            className="absolute right-2 px-3 py-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded text-xs font-medium transition"
+                                        >
+                                            Add
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+
+                            {/* Task Lists View */}
+                            <div className="flex-1 overflow-y-auto p-4">
+                                <div className="max-w-4xl mx-auto space-y-4">
+                                    
+                                    {/* Active Tasks List */}
+                                    <div className="space-y-1">
+                                        {activeTasks.length === 0 ? (
+                                            <div className="py-12 text-center text-zinc-600 space-y-2">
+                                                <Icon name="inbox" className="w-8 h-8 mx-auto opacity-50" />
+                                                <p className="text-xs">No pending tasks in this section.</p>
+                                            </div>
+                                        ) : (
+                                            activeTasks.map(task => (
+                                                <div 
+                                                    key={task.id}
+                                                    className="group flex items-center justify-between p-3 bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-800/60 rounded-lg transition-all"
+                                                >
+                                                    <div className="flex items-center gap-3 flex-1 min-w-0 pr-2">
+                                                        <button 
+                                                            onClick={() => toggleTask(task.id)}
+                                                            className="text-zinc-500 hover:text-blue-500 transition shrink-0"
+                                                        >
+                                                            <Icon name="circle" className="w-4 h-4" />
+                                                        </button>
+                                                        <span className="text-sm text-zinc-200 truncate select-none">
+                                                            {task.title}
+                                                        </span>
+                                                    </div>
+                                                    
+                                                    <button 
+                                                        onClick={() => deleteTask(task.id)}
+                                                        className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-400 p-1 transition"
+                                                        title="Delete Task"
+                                                    >
+                                                        <Icon name="trash-2" className="w-3.5 h-3.5" />
+                                                    </button>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+
+                                    {/* Completed Tasks Accordion */}
+                                    {completedTasks.length > 0 && (
+                                        <div className="pt-4 border-t border-zinc-800/40">
+                                            <button 
+                                                onClick={() => setShowCompleted(!showCompleted)}
+                                                className="flex items-center gap-2 text-xs font-medium text-zinc-500 hover:text-zinc-400 transition mb-3"
+                                            >
+                                                <Icon name={showCompleted ? "chevron-down" : "chevron-right"} className="w-3.5 h-3.5" />
+                                                <span>Show completed ({completedTasks.length})</span>
+                                            </button>
+
+                                            {showCompleted && (
+                                                <div className="space-y-1">
+                                                    {completedTasks.map(task => (
+                                                        <div 
+                                                            key={task.id}
+                                                            className="group flex items-center justify-between p-3 bg-zinc-900/30 hover:bg-zinc-900/50 border border-zinc-800/30 rounded-lg transition-all opacity-60"
+                                                        >
+                                                            <div className="flex items-center gap-3 flex-1 min-w-0 pr-2">
+                                                                <button 
+                                                                    onClick={() => toggleTask(task.id)}
+                                                                    className="text-blue-400 hover:text-zinc-400 transition shrink-0"
+                                                                >
+                                                                    <Icon name="check-circle-2" className="w-4 h-4" />
+                                                                </button>
+                                                                <span className="text-sm text-zinc-400 line-through truncate select-none">
+                                                                    {task.title}
+                                                                </span>
+                                                            </div>
+                                                            
+                                                            <button 
+                                                                onClick={() => deleteTask(task.id)}
+                                                                className="opacity-0 group-hover:opacity-100 text-zinc-500 hover:text-red-400 p-1 transition"
+                                                                title="Delete Task"
+                                                            >
+                                                                <Icon name="trash-2" className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                </div>
+                            </div>
+
+                        </main>
+
+                    </div>
+                </div>
+            );
+        }
+
+        // Render React Application
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
